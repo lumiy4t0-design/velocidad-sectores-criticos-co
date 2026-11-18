@@ -35,7 +35,7 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# Coordenadas representativas por Departamento en Colombia
+# Coordenadas internas representativas por departamento (Solo para cálculo interno)
 coordenadas_departamentos = {
     'VALLE DEL CAUCA': {'lat': 3.4516, 'lon': -76.5320},
     'NARIÑO': {'lat': 1.2136, 'lon': -77.2811},
@@ -58,7 +58,7 @@ coordenadas_departamentos = {
     'OTRO': {'lat': 4.5709, 'lon': -74.2973},
 }
 
-# Sidebar: Formulario
+# Sidebar: Formulario (ÚNICAMENTE PARÁMETROS DEL TRAMO VIAL)
 st.sidebar.header("📍 Parámetros del Tramo Vial")
 
 dep_seleccionado = st.sidebar.selectbox(
@@ -72,27 +72,24 @@ entidad_seleccionada = st.sidebar.selectbox("Entidad responsable:", entidades)
 tipos_calzada = ['SENCILLA', 'DOBLE', 'MULTICARRIL', 'OTRO']
 tipo_calzada = st.sidebar.selectbox("Tipo de Calzada:", tipos_calzada)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🌐 Ajuste de Coordenadas (Opcional)")
-
-coords_def = coordenadas_departamentos.get(dep_seleccionado, {'lat': 4.5709, 'lon': -74.2973})
-latitud = st.sidebar.number_input("Latitud (°N):", value=float(coords_def['lat']), format="%.4f")
-longitud = st.sidebar.number_input("Longitud (°W):", value=float(coords_def['lon']), format="%.4f")
-
 # Botón de predicción
 if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
 
-    # Crear dataframe con ceros según columnas de entrenamiento
-    # CORRECCIÓN: index=[0] en lugar de index=
+    # Obtención interna de coordenadas según departamento seleccionado
+    coords = coordenadas_departamentos.get(dep_seleccionado, {'lat': 4.5709, 'lon': -74.2973})
+    latitud = coords['lat']
+    longitud = coords['lon']
+
+    # Crear vector de entrada de ceros
     input_data = pd.DataFrame(0, index=[0], columns=columnas_train)
 
-    # Asignar variables numéricas
+    # Asignar coordenadas internas
     if 'Latitud' in input_data.columns:
         input_data['Latitud'] = latitud
     if 'Longitud' in input_data.columns:
         input_data['Longitud'] = longitud
 
-    # Activar One-Hot Encoding según selección
+    # Activar One-Hot Encoding
     col_dep = f"Departamento_{dep_seleccionado}"
     if col_dep in input_data.columns:
         input_data[col_dep] = 1
@@ -105,8 +102,8 @@ if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
     if col_calz in input_data.columns:
         input_data[col_calz] = 1
 
-    # REGLA CLAVE: Solo escalar si el modelo es Regresión Logística.
-    # El Árbol de Decisión fue entrenado en Colab con datos reales sin escalar (X_train).
+    # Escalar solo si el modelo lo requiere (Regresión Logística).
+    # Los Árboles de Decisión fueron entrenados con datos sin escalar.
     es_logistica = modelo.__class__.__name__ == 'LogisticRegression'
 
     if es_logistica:
@@ -118,16 +115,16 @@ if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
         input_data_eval = input_data
 
     # Inferencia
-    prediccion = modelo.predict(input_data_eval)[0]
-    probabilidades = modelo.predict_proba(input_data_eval)[0]
-    prob_alto_riesgo = probabilidades[1] * 100
+    prediccion = modelo.predict(input_data_eval)
+    probabilidades = modelo.predict_proba(input_data_eval)
+    prob_alto_riesgo = probabilidades[0][1] * 100
 
-    # Bloque de Resultados
+    # BLOQUE DE RESULTADOS
     st.markdown("### 📊 Resultado de la Evaluación del Sector")
     col1, col2 = st.columns(2)
 
     with col1:
-        if prediccion == 1:
+        if prediccion[0] == 1:
             st.error("🚨 **CLASIFICACIÓN: SECTOR DE ALTO RIESGO**")
             st.write(
                 "Este tramo presenta alta vulnerabilidad y concentración "
@@ -149,8 +146,8 @@ if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
 
     st.markdown("---")
 
-    # RESULTADOS GEOGRÁFICOS
-    st.markdown("### 🌐 Coordenadas Geográficas Evaluadas")
+    # RESULTADOS GEOGRÁFICOS (ÚNICAMENTE COMO TARJETA DE SALIDA)
+    st.markdown("### 🌐 Coordenadas Geográficas Asignadas al Tramo")
     col_lat, col_lon, col_dep_info = st.columns(3)
     col_lat.metric("Latitud (Norte)", f"{latitud:.4f}°")
     col_lon.metric("Longitud (Oeste)", f"{longitud:.4f}°")
@@ -158,7 +155,8 @@ if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
 
     st.info(
         f"📌 **Resumen Institucional:** Tramo evaluado en **{dep_seleccionado}** "
-        f"a cargo de **{entidad_seleccionada}** (Calzada {tipo_calzada})."
+        f"a cargo de **{entidad_seleccionada}** (Calzada {tipo_calzada}). "
+        f"Coordenadas obtenidas automáticamente."
     )
 
 else:
