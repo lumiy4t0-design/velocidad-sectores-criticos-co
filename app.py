@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Título y encabezado
+# Título y encabezado principal
 st.title("🚨 Clasificador de Sectores Críticos por Exceso de Velocidad")
 st.markdown(
     "**Proyecto Integrador - Fundamentos de Ciencia de Datos** | "
@@ -18,7 +18,7 @@ st.markdown(
 )
 st.markdown("---")
 
-# Cargar artefactos
+# Cargar artefactos .pkl
 @st.cache_resource
 def cargar_artefactos():
     modelo = joblib.load('modelo_siniestralidad_vial.pkl')
@@ -35,47 +35,66 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# Sidebar: Formulario de entrada
+# Coordenadas representativas por Departamento de Colombia
+coordenadas_departamentos = {
+    'VALLE DEL CAUCA': {'lat': 3.4516, 'lon': -76.5320},
+    'ANTIOQUIA': {'lat': 6.2442, 'lon': -75.5812},
+    'CUNDINAMARCA': {'lat': 4.6097, 'lon': -74.0817},
+    'ATLANTICO': {'lat': 10.9685, 'lon': -74.7813},
+    'SANTANDER': {'lat': 7.1254, 'lon': -73.1198},
+    'BOLIVAR': {'lat': 10.3997, 'lon': -75.5144},
+    'BOYACA': {'lat': 5.5353, 'lon': -73.3678},
+    'CALDAS': {'lat': 5.0689, 'lon': -75.5174},
+    'CAUCA': {'lat': 2.4448, 'lon': -76.6147},
+    'CESAR': {'lat': 10.4631, 'lon': -73.2532},
+    'CORDOBA': {'lat': 8.7480, 'lon': -75.8814},
+    'HUILA': {'lat': 2.9273, 'lon': -75.2819},
+    'MAGDALENA': {'lat': 11.2408, 'lon': -74.1990},
+    'NARIÑO': {'lat': 1.2136, 'lon': -77.2811},
+    'NORTE DE SANTANDER': {'lat': 7.8939, 'lon': -72.5078},
+    'QUINDIO': {'lat': 4.5339, 'lon': -75.6811},
+    'RISARALDA': {'lat': 4.8133, 'lon': -75.6961},
+    'TOLIMA': {'lat': 4.4389, 'lon': -75.2322},
+    'OTRO': {'lat': 4.5709, 'lon': -74.2973},
+}
+
+# Sidebar: Formulario (SOLO Parámetros del Tramo)
 st.sidebar.header("📍 Parámetros del Tramo Vial")
 
-departamentos = [
-    'VALLE DEL CAUCA', 'ANTIOQUIA', 'CUNDINAMARCA', 'ATLANTICO', 'SANTANDER',
-    'BOLIVAR', 'BOYACA', 'CALDAS', 'CAUCA', 'CESAR', 'CORDOBA', 'HUILA',
-    'MAGDALENA', 'NARIÑO', 'NORTE DE SANTANDER', 'QUINDIO', 'RISARALDA',
-    'TOLIMA', 'OTRO'
-]
-entidades = ['INVIAS', 'ANI', 'ALCALDIA', 'GOBERNACION', 'OTRA']
-tipos_calzada = ['SENCILLA', 'DOBLE', 'MULTICARRIL', 'OTRO']
+dep_seleccionado = st.sidebar.selectbox(
+    "Seleccione el Departamento:",
+    list(coordenadas_departamentos.keys())
+)
 
-dep_seleccionado = st.sidebar.selectbox("Seleccione el Departamento:", departamentos)
-entidad_seleccionada = st.sidebar.selectbox("Entidad responsable del tramo:", entidades)
+entidades = ['INVIAS', 'ANI', 'ALCALDIA', 'GOBERNACION', 'OTRA']
+entidad_seleccionada = st.sidebar.selectbox("Entidad responsable:", entidades)
+
+tipos_calzada = ['SENCILLA', 'DOBLE', 'MULTICARRIL', 'OTRO']
 tipo_calzada = st.sidebar.selectbox("Tipo de Calzada:", tipos_calzada)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🌐 Coordenadas del Tramo en Colombia")
-
-latitud = st.sidebar.slider(
-    "Latitud (Norte):", min_value=1.0, max_value=12.5, value=4.57, step=0.01
-)
-longitud = st.sidebar.slider(
-    "Longitud (Oeste):", min_value=-79.0, max_value=-66.0, value=-74.30, step=0.01
-)
-
 # Botón de predicción
-if st.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
-    # Crear vector de características de 0s con la estructura de entrenamiento
+if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
+
+    # Asignar coordenadas automáticamente según departamento
+    coords = coordenadas_departamentos.get(dep_seleccionado, {'lat': 4.5709, 'lon': -74.2973})
+    latitud = coords['lat']
+    longitud = coords['lon']
+
+    # Crear dataframe con ceros según columnas de entrenamiento
     input_data = pd.DataFrame(0, index=[0], columns=columnas_train)
 
-    # Asignar valores numéricos
-    input_data['Latitud'] = latitud
-    input_data['Longitud'] = longitud
+    # Asignar variables numéricas
+    if 'Latitud' in input_data.columns:
+        input_data['Latitud'] = latitud
+    if 'Longitud' in input_data.columns:
+        input_data['Longitud'] = longitud
 
-    # Normalizar numéricas (solo las que existan en el DataFrame)
-    cols_num_presentes = [c for c in cols_num if c in input_data.columns]
-    if cols_num_presentes:
-        input_data[cols_num_presentes] = scaler.transform(input_data[cols_num_presentes])
+    # Normalizar numéricas (solo las presentes)
+    num_cols = [c for c in cols_num if c in input_data.columns]
+    if num_cols:
+        input_data[num_cols] = scaler.transform(input_data[num_cols])
 
-    # Activar One-Hot Encoding según selección
+    # Activar One-Hot Encoding
     col_dep = f"Departamento_{dep_seleccionado}"
     if col_dep in input_data.columns:
         input_data[col_dep] = 1
@@ -93,21 +112,22 @@ if st.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
     probabilidades = modelo.predict_proba(input_data)[0]
     prob_alto_riesgo = probabilidades[1] * 100
 
-    st.markdown("### 📊 Resultado de la Evaluación")
+    # Bloque de Resultados
+    st.markdown("### 📊 Resultado de la Evaluación del Sector")
     col1, col2 = st.columns(2)
 
     with col1:
         if prediccion == 1:
             st.error("🚨 **CLASIFICACIÓN: SECTOR DE ALTO RIESGO**")
             st.write(
-                "Este tramo vial presenta características asociadas a alta "
-                "frecuencia de siniestros por exceso de velocidad."
+                "Este tramo presenta alta vulnerabilidad y concentración "
+                "histórica de exceso de velocidad."
             )
         else:
             st.success("✅ **CLASIFICACIÓN: SECTOR DE BAJO / MODERADO RIESGO**")
             st.write(
-                "Este tramo vial no muestra indicadores de concentración crítica "
-                "de exceso de velocidad."
+                "Este tramo muestra un nivel controlado de riesgo vial según "
+                "los indicadores analizados."
             )
 
     with col2:
@@ -118,7 +138,22 @@ if st.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
         st.progress(int(prob_alto_riesgo))
 
     st.markdown("---")
+
+    # RESULTADOS GEOGRÁFICOS (Coordenadas como respuesta)
+    st.markdown("### 🌐 Coordenadas Geográficas Asignadas al Tramo")
+    col_lat, col_lon, col_dep_info = st.columns(3)
+    col_lat.metric("Latitud (Norte)", f"{latitud:.4f}°")
+    col_lon.metric("Longitud (Oeste)", f"{longitud:.4f}°")
+    col_dep_info.metric("Departamento", dep_seleccionado)
+
     st.info(
-        f"📌 **Resumen de consulta:** Tramo ubicado en **{dep_seleccionado}** "
-        f"(Lat: {latitud}, Lon: {longitud}) a cargo de **{entidad_seleccionada}**."
+        f"📌 **Resumen Institucional:** Tramo en **{dep_seleccionado}** a cargo de "
+        f"**{entidad_seleccionada}** (Calzada {tipo_calzada}). Coordenadas "
+        f"geográficas asociadas automáticamente al sector."
+    )
+
+else:
+    st.info(
+        "👈 Seleccione los **Parámetros del Tramo Vial** en el menú de la "
+        "izquierda y presione **'Evaluar Riesgo del Sector Vial'**."
     )
