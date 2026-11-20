@@ -4,163 +4,73 @@ import numpy as np
 import joblib
 
 # Configuración de la página web
-st.set_page_config(
-    page_title="Siniestralidad Vial Colombia",
-    page_icon="🚨",
-    layout="wide"
-)
-
-# Título y encabezado principal
+st.set_page_config(page_title="Predicción de Riesgo Vial", page_icon="🚨", layout="wide")
 st.title("🚨 Clasificador de Sectores Críticos por Exceso de Velocidad")
-st.markdown(
-    "**Proyecto Integrador - Fundamentos de Ciencia de Datos** | "
-    "*Agencia Nacional de Seguridad Vial (Colombia)*"
-)
-st.markdown("---")
+st.subheader("Proyecto Integrador - Fundamentos de Ciencia de Datos")
+st.write("Aplicación para predecir si un tramo vial en Colombia es de **Alto Riesgo** mediante Machine Learning.")
 
-# Cargar artefactos .pkl
+# Cargar el modelo entrenado
 @st.cache_resource
-def cargar_artefactos():
+def cargar_modelo():
     modelo = joblib.load('modelo_siniestralidad_vial.pkl')
     scaler = joblib.load('escalador_vial.pkl')
-    columnas_train = joblib.load('columnas_train.pkl')
+    columnas = joblib.load('columnas_train.pkl')
     cols_num = joblib.load('cols_num.pkl')
-    return modelo, scaler, columnas_train, cols_num
+    return modelo, scaler, columnas, cols_num
 
 try:
-    modelo, scaler, columnas_train, cols_num = cargar_artefactos()
-    st.sidebar.success("✅ Modelo y artefactos cargados correctamente")
+    modelo, scaler, columnas_train, cols_num = cargar_modelo()
+    st.sidebar.success("✅ Modelo cargado correctamente")
 except Exception as e:
-    st.error("⚠️ Error al cargar los artefactos .pkl. Verifica que estén en el repositorio.")
+    st.error("❌ No se encontraron los archivos .pkl en la carpeta.")
     st.exception(e)
     st.stop()
 
-# Coordenadas internas representativas por departamento (Solo para cálculo interno)
-coordenadas_departamentos = {
-    'VALLE DEL CAUCA': {'lat': 3.4516, 'lon': -76.5320},
-    'NARIÑO': {'lat': 1.2136, 'lon': -77.2811},
-    'ANTIOQUIA': {'lat': 6.2442, 'lon': -75.5812},
-    'CUNDINAMARCA': {'lat': 4.6097, 'lon': -74.0817},
-    'ATLANTICO': {'lat': 10.9685, 'lon': -74.7813},
-    'SANTANDER': {'lat': 7.1254, 'lon': -73.1198},
-    'BOLIVAR': {'lat': 10.3997, 'lon': -75.5144},
-    'BOYACA': {'lat': 5.5353, 'lon': -73.3678},
-    'CALDAS': {'lat': 5.0689, 'lon': -75.5174},
-    'CAUCA': {'lat': 2.4448, 'lon': -76.6147},
-    'CESAR': {'lat': 10.4631, 'lon': -73.2532},
-    'CORDOBA': {'lat': 8.7480, 'lon': -75.8814},
-    'HUILA': {'lat': 2.9273, 'lon': -75.2819},
-    'MAGDALENA': {'lat': 11.2408, 'lon': -74.1990},
-    'NORTE DE SANTANDER': {'lat': 7.8939, 'lon': -72.5078},
-    'QUINDIO': {'lat': 4.5339, 'lon': -75.6811},
-    'RISARALDA': {'lat': 4.8133, 'lon': -75.6961},
-    'TOLIMA': {'lat': 4.4389, 'lon': -75.2322},
-    'OTRO': {'lat': 4.5709, 'lon': -74.2973},
-}
+# Entradas del usuario en la barra lateral
+st.sidebar.header("Parámetros del Tramo Vial")
+latitud = st.sidebar.number_input("Latitud", value=4.570868, format="%.6f")
+longitud = st.sidebar.number_input("Longitud", value=-74.297333, format="%.6f")
 
-# Sidebar: Formulario (ÚNICAMENTE PARÁMETROS DEL TRAMO VIAL)
-st.sidebar.header("📍 Parámetros del Tramo Vial")
+if st.sidebar.button("🔍 Evaluar Riesgo"):
+    # Construir DataFrame de entrada con las mismas columnas usadas en entrenamiento
+    entrada = pd.DataFrame(0, index=[0], columns=columnas_train)
 
-dep_seleccionado = st.sidebar.selectbox(
-    "Seleccione el Departamento:",
-    list(coordenadas_departamentos.keys())
-)
+    # Asignar solo las features que el usuario ingresa y existen en el modelo
+    if 'Latitud' in entrada.columns:
+        entrada['Latitud'] = latitud
+    if 'Longitud' in entrada.columns:
+        entrada['Longitud'] = longitud
 
-entidades = ['INVIAS', 'ANI', 'ALCALDIA', 'GOBERNACION', 'OTRA']
-entidad_seleccionada = st.sidebar.selectbox("Entidad responsable:", entidades)
-
-tipos_calzada = ['SENCILLA', 'DOBLE', 'MULTICARRIL', 'OTRO']
-tipo_calzada = st.sidebar.selectbox("Tipo de Calzada:", tipos_calzada)
-
-# Botón de predicción
-if st.sidebar.button("🔍 Evaluar Riesgo del Sector Vial", type="primary"):
-
-    # Obtención interna de coordenadas según departamento seleccionado
-    coords = coordenadas_departamentos.get(dep_seleccionado, {'lat': 4.5709, 'lon': -74.2973})
-    latitud = coords['lat']
-    longitud = coords['lon']
-
-    # Crear vector de entrada de ceros
-    input_data = pd.DataFrame(0, index=[0], columns=columnas_train)
-
-    # Asignar coordenadas internas
-    if 'Latitud' in input_data.columns:
-        input_data['Latitud'] = latitud
-    if 'Longitud' in input_data.columns:
-        input_data['Longitud'] = longitud
-
-    # Activar One-Hot Encoding
-    col_dep = f"Departamento_{dep_seleccionado}"
-    if col_dep in input_data.columns:
-        input_data[col_dep] = 1
-
-    col_ent = f"ENTIDAD_{entidad_seleccionada}"
-    if col_ent in input_data.columns:
-        input_data[col_ent] = 1
-
-    col_calz = f"TIPO_CALZ_{tipo_calzada}"
-    if col_calz in input_data.columns:
-        input_data[col_calz] = 1
-
-    # Escalar solo si el modelo lo requiere (Regresión Logística).
-    # Los Árboles de Decisión fueron entrenados con datos sin escalar.
+    # Detectar si el modelo es Regresión Logística (requiere escalado)
     es_logistica = modelo.__class__.__name__ == 'LogisticRegression'
 
     if es_logistica:
-        input_data_eval = input_data.copy()
-        num_cols = [c for c in cols_num if c in input_data_eval.columns]
-        if num_cols:
-            input_data_eval[num_cols] = scaler.transform(input_data_eval[num_cols])
+        entrada_escalada = entrada.copy()
+        cols_validas = [c for c in cols_num if c in entrada_escalada.columns]
+        # Transformar SOLO las columnas numéricas que existen
+        entrada_escalada[cols_validas] = scaler.transform(entrada_escalada[cols_validas])
+        X_input = entrada_escalada
     else:
-        input_data_eval = input_data
+        X_input = entrada
 
-    # Inferencia
-    prediccion = modelo.predict(input_data_eval)
-    probabilidades = modelo.predict_proba(input_data_eval)
-    prob_alto_riesgo = probabilidades[0][1] * 100
+    # Predicción
+    prediccion = modelo.predict(X_input)
 
-    # BLOQUE DE RESULTADOS
-    st.markdown("### 📊 Resultado de la Evaluación del Sector")
-    col1, col2 = st.columns(2)
+    # Probabilidad (usando la clase positiva = 1)
+    proba = None
+    if hasattr(modelo, 'predict_proba'):
+        proba = modelo.predict_proba(X_input)[0][1]
 
-    with col1:
-        if prediccion[0] == 1:
-            st.error("🚨 **CLASIFICACIÓN: SECTOR DE ALTO RIESGO**")
-            st.write(
-                "Este tramo presenta alta vulnerabilidad y concentración "
-                "histórica de exceso de velocidad."
-            )
-        else:
-            st.success("✅ **CLASIFICACIÓN: SECTOR DE BAJO / MODERADO RIESGO**")
-            st.write(
-                "Este tramo muestra un nivel controlado de riesgo vial según "
-                "los indicadores analizados."
-            )
+    # Mostrar resultado
+    if prediccion[0] == 1:
+        st.error("🚨 **ALTO RIESGO** detectado en el tramo.")
+    else:
+        st.success("✅ **BAJO RIESGO** en el tramo.")
 
-    with col2:
-        st.metric(
-            label="Probabilidad Estimada de Alto Riesgo",
-            value=f"{prob_alto_riesgo:.1f}%"
-        )
-        st.progress(int(min(100, max(0, prob_alto_riesgo))))
+    if proba is not None:
+        st.metric("Probabilidad de Alto Riesgo", f"{proba:.2%}")
 
-    st.markdown("---")
+    st.subheader("Datos evaluados")
+    cols_mostrar = [c for c in ['Latitud', 'Longitud'] if c in entrada.columns]
+    st.dataframe(entrada[cols_mostrar] if cols_mostrar else entrada)
 
-    # RESULTADOS GEOGRÁFICOS (ÚNICAMENTE COMO TARJETA DE SALIDA)
-    st.markdown("### 🌐 Coordenadas Geográficas Asignadas al Tramo")
-    col_lat, col_lon, col_dep_info = st.columns(3)
-    col_lat.metric("Latitud (Norte)", f"{latitud:.4f}°")
-    col_lon.metric("Longitud (Oeste)", f"{longitud:.4f}°")
-    col_dep_info.metric("Departamento", dep_seleccionado)
-
-    st.info(
-        f"📌 **Resumen Institucional:** Tramo evaluado en **{dep_seleccionado}** "
-        f"a cargo de **{entidad_seleccionada}** (Calzada {tipo_calzada}). "
-        f"Coordenadas obtenidas automáticamente."
-    )
-
-else:
-    st.info(
-        "👈 Seleccione los **Parámetros del Tramo Vial** en el menú de la "
-        "izquierda y presione **'Evaluar Riesgo del Sector Vial'**."
-    )
